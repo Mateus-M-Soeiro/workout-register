@@ -7,7 +7,11 @@ Aplicação Flutter para organizar rotinas, registrar séries e acompanhar a evo
 - **Histórico:** acesso por rotina ou pelo ícone no topo do menu, com início, fim e valores individuais de cada série. Sessões antigas são preservadas, com início indicado como não registrado. O vínculo antigo por nome é recuperado quando há uma única rotina correspondente; registros ambíguos continuam no histórico geral.
 - **Evolução:** gráficos diários de repetições ou volume (peso × repetições), períodos de 7/30 dias e histórico com detalhes das séries.
 
-Rotinas e treinos concluídos são salvos localmente com `shared_preferences`. Na web, os dados pertencem ao navegador e à origem (host e porta). Use a mesma porta para preservar o acesso aos registros durante o desenvolvimento. Limpar os dados do site remove os registros. Treinos em andamento não são persistidos; sair da tela pede confirmação quando há alterações.
+Rotinas, histórico e o treino em andamento são salvos localmente com `shared_preferences`. As alterações no treino são salvas a cada edição e ao entrar em background. Ao reabrir, use **Retomar treino**, mantendo o horário original de início. Voltar ao menu conserva o treino; **Descartar treino** remove o rascunho após confirmação. Ao concluir, o histórico e a remoção do rascunho são gravados juntos.
+
+É possível marcar e desmarcar exercícios como finalizados. Editar as séries reabre o exercício. **Trocar exercício** altera somente a sessão atual, sem modificar a rotina; o diálogo avisa que as séries do exercício substituído serão removidas. O histórico registra o exercício realizado e a marcação de conclusão.
+
+Na web, os dados pertencem ao navegador e à origem (host e porta). Use a mesma porta para preservar o acesso aos registros durante o desenvolvimento. Limpar os dados do site remove os registros.
 
 ## Executar na web
 

@@ -183,7 +183,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${dateLabel(session.date)}/${session.date.year} · ${session.date.hour.toString().padLeft(2, '0')}:${session.date.minute.toString().padLeft(2, '0')}',
+                    'Início: ${session.startedAt == null ? 'Não registrado' : timestamp(session.startedAt!)}\nFim: ${session.endedAt == null ? 'Não registrado' : timestamp(session.endedAt!)}',
                     style: const TextStyle(color: accent, fontSize: 12),
                   ),
                   const SizedBox(height: 8),

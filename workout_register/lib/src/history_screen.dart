@@ -52,7 +52,7 @@ class HistoryScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Fim: ${timestamp(session.endedAt ?? session.date)}',
+                        'Fim: ${session.endedAt == null ? 'Não registrado' : timestamp(session.endedAt!)}',
                         style: const TextStyle(color: muted),
                       ),
                       const SizedBox(height: 12),
@@ -65,6 +65,16 @@ class HistoryScreen extends StatelessWidget {
                         (exercise) => ExpansionTile(
                           tilePadding: EdgeInsets.zero,
                           title: Text(exercise.key),
+                          leading:
+                              session.completedExercises.contains(exercise.key)
+                              ? const Tooltip(
+                                  message: 'Exercício finalizado',
+                                  child: Icon(
+                                    Icons.check_circle,
+                                    color: accent,
+                                  ),
+                                )
+                              : null,
                           subtitle: Text('${exercise.value.length} séries'),
                           children: [
                             if (exercise.value.isEmpty)

@@ -9,56 +9,183 @@ class WorkoutScreen extends StatefulWidget {
     required this.routine,
     required this.onFinish,
     this.previous,
+    this.draft,
+    this.onDraft,
+    this.onDiscard,
     super.key,
   });
   final Routine routine;
   final Session? previous;
+  final ActiveWorkout? draft;
+  final Future<void> Function(ActiveWorkout)? onDraft;
+  final Future<void> Function()? onDiscard;
   final Future<void> Function(Session) onFinish;
   @override
   State<WorkoutScreen> createState() => _WorkoutScreenState();
 }
 
-class _WorkoutScreenState extends State<WorkoutScreen> {
+class _WorkoutScreenState extends State<WorkoutScreen>
+    with WidgetsBindingObserver {
   final form = GlobalKey<FormState>();
-  late final exercises = {
-    for (final name in widget.routine.exercises) name: <TrainingSet>[],
-  };
-  late final DateTime startedAt;
+  late final ActiveWorkout draft;
+  Map<String, List<TrainingSet>> get exercises => draft.exercises;
+  DateTime get startedAt => draft.startedAt;
+  bool draftError = false;
   @override
   void initState() {
     super.initState();
-    startedAt = DateTime.now();
+    draft = widget.draft == null
+        ? ActiveWorkout.start(widget.routine)
+        : ActiveWorkout.fromJson(widget.draft!.toJson());
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && !saving && !mayLeave) persist();
+  }
+
+  Future<bool> persist() async {
+    try {
+      await widget.onDraft?.call(draft);
+      if (mounted && draftError) setState(() => draftError = false);
+      return true;
+    } catch (_) {
+      if (mounted) setState(() => draftError = true);
+      return false;
+    }
+  }
+
+  void changed(String name) {
+    draft.completed.remove(name);
+    setState(() {});
+    persist();
+  }
+
+  Future<void> replaceExercise(String name) async {
+    final dialogForm = GlobalKey<FormState>();
+    var replacement = '';
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Trocar exercício'),
+        content: Form(
+          key: dialogForm,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'A troca vale apenas para este treino. As séries do exercício substituído serão removidas.',
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                autofocus: true,
+                maxLength: 80,
+                decoration: const InputDecoration(labelText: 'Novo exercício'),
+                onChanged: (value) => replacement = value.trim(),
+                validator: (_) => replacement.isEmpty
+                    ? 'Informe o exercício.'
+                    : exercises.keys.any(
+                        (e) => e.toLowerCase() == replacement.toLowerCase(),
+                      )
+                    ? 'Esse exercício já está no treino.'
+                    : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (dialogForm.currentState!.validate()) {
+                Navigator.pop(context, replacement);
+              }
+            },
+            child: const Text('Trocar'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+    final updated = {
+      for (final entry in exercises.entries)
+        if (entry.key == name)
+          result: <TrainingSet>[]
+        else
+          entry.key: entry.value,
+    };
+    exercises
+      ..clear()
+      ..addAll(updated);
+    changed(name);
   }
 
   bool saving = false;
   bool mayLeave = false;
-  bool edited = false;
 
   Future<void> leave() async {
     if (saving) return;
+    setState(() => saving = true);
+    final saved = await persist();
+    if (!mounted) return;
+    setState(() {
+      saving = false;
+      mayLeave = saved;
+    });
+    if (saved) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context);
+      });
+    }
+  }
+
+  Future<void> discard() async {
+    if (saving) return;
     final confirmed =
-        !edited ||
         await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Sair do treino?'),
-                content: const Text(
-                  'As séries deste treino ainda não foram salvas.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Continuar treino'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Descartar'),
-                  ),
-                ],
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Descartar treino?'),
+            content: const Text(
+              'O treino em andamento e suas séries serão removidos.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Continuar treino'),
               ),
-            ) ==
-            true;
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Descartar'),
+              ),
+            ],
+          ),
+        ) ==
+        true;
     if (!confirmed || !mounted) return;
+    setState(() => saving = true);
+    try {
+      await widget.onDiscard?.call();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          saving = false;
+          draftError = true;
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() => mayLeave = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Navigator.pop(context);
@@ -90,6 +217,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           routineId: widget.routine.id,
           startedAt: startedAt,
           endedAt: DateTime.now(),
+          completedExercises: Set.of(draft.completed),
         ),
       );
       if (!mounted) return;
@@ -125,6 +253,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Seu treino'),
+        actions: [
+          IconButton(
+            onPressed: saving ? null : discard,
+            tooltip: 'Descartar treino',
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
         leading: IconButton(
           onPressed: leave,
           tooltip: 'Voltar',
@@ -136,6 +271,18 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           key: form,
           child: PageContent(
             children: [
+              if (draftError)
+                MaterialBanner(
+                  content: const Text(
+                    'Não foi possível salvar o treino no dispositivo. Tente novamente antes de sair.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: persist,
+                      child: const Text('Tentar novamente'),
+                    ),
+                  ],
+                ),
               const Text(
                 'HORA DE SE MOVIMENTAR',
                 style: TextStyle(
@@ -168,6 +315,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 final name = entry.value.key;
                 final sets = entry.value.value;
                 return Padding(
+                  key: ValueKey(name),
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Panel(
                     child: Column(
@@ -190,6 +338,51 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            FilterChip(
+                              label: Text(
+                                draft.completed.contains(name)
+                                    ? 'Finalizado'
+                                    : 'Marcar finalizado',
+                              ),
+                              selected: draft.completed.contains(name),
+                              onSelected: saving
+                                  ? null
+                                  : (value) {
+                                      if (value &&
+                                          !sets.every((s) => s.valid)) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Preencha ou remova as séries incompletas deste exercício.',
+                                                ),
+                                              ),
+                                            );
+                                        return;
+                                      }
+                                      setState(() {
+                                        if (value) {
+                                          draft.completed.add(name);
+                                        } else {
+                                          draft.completed.remove(name);
+                                        }
+                                      });
+                                      persist();
+                                    },
+                            ),
+                            TextButton.icon(
+                              onPressed: saving
+                                  ? null
+                                  : () => replaceExercise(name),
+                              icon: const Icon(Icons.swap_horiz),
+                              label: const Text('Trocar exercício'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                         if (widget.previous != null) ...[
                           Text(
                             'Último treino · ${dateLabel(widget.previous!.date)}',
@@ -255,7 +448,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                     ),
                                     onChanged: (value) {
                                       item.value.reps = value;
-                                      edited = true;
+                                      changed(name);
                                     },
                                     validator: (value) =>
                                         (int.tryParse(value ?? '') ?? 0) > 0
@@ -278,7 +471,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                     ),
                                     onChanged: (value) {
                                       item.value.weight = value;
-                                      edited = true;
+                                      changed(name);
                                     },
                                     validator: (value) {
                                       final n = double.tryParse(
@@ -295,7 +488,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                       ? null
                                       : () => setState(() {
                                           sets.removeAt(item.key);
-                                          edited = true;
+                                          changed(name);
                                         }),
                                   tooltip: 'Remover série ${item.key + 1}',
                                   icon: const Icon(Icons.close, size: 18),
@@ -309,7 +502,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                               ? null
                               : () => setState(() {
                                   sets.add(TrainingSet());
-                                  edited = true;
+                                  changed(name);
                                 }),
                           icon: const Icon(Icons.add, size: 18),
                           label: const Text('Adicionar série'),

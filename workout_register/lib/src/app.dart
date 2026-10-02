@@ -148,19 +148,58 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void start(Routine routine) => Navigator.push<void>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => WorkoutScreen(
-        routine: routine,
-        previous: historyForRoutine(store.sessions, routine).firstOrNull,
-        onFinish: (session) async {
-          await store.save(sessions: [...store.sessions, session]);
-          if (mounted) setState(() {});
-        },
+  Future<void> start(Routine routine) async {
+    if (saving) return;
+    setState(() => saving = true);
+    try {
+      if (store.active == null) {
+        await store.save(active: ActiveWorkout.start(routine));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível iniciar e salvar o treino. Tente novamente.',
+            ),
+          ),
+        );
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+    if (!mounted) return;
+    final draft = store.active!;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WorkoutScreen(
+          routine: draft.routine,
+          draft: draft,
+          previous: historyForRoutine(
+            store.sessions,
+            draft.routine,
+          ).firstOrNull,
+          onDraft: (draft) async {
+            await store.save(active: draft);
+            if (mounted) setState(() {});
+          },
+          onDiscard: () async {
+            await store.save(clearActive: true);
+            if (mounted) setState(() {});
+          },
+          onFinish: (session) async {
+            await store.save(
+              sessions: [...store.sessions, session],
+              clearActive: true,
+            );
+            if (mounted) setState(() {});
+          },
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   void history([Routine? routine]) => Navigator.push<void>(
     context,
@@ -231,6 +270,35 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       const SizedBox(height: 16),
       if (saving) const LinearProgressIndicator(),
+      if (store.active != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Em andamento: ${store.active!.routine.name}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Início: ${timestamp(store.active!.startedAt)}',
+                  style: const TextStyle(color: muted),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: saving ? null : () => start(store.active!.routine),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Retomar treino'),
+                ),
+              ],
+            ),
+          ),
+        ),
       if (store.routines.isEmpty)
         const Panel(
           child: Column(
@@ -311,7 +379,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: saving ? null : () => start(routine),
+                    onPressed: saving || store.active != null
+                        ? null
+                        : () => start(routine),
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: const Text('Iniciar treino'),
                   ),
