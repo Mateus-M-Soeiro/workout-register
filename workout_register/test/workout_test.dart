@@ -53,8 +53,14 @@ void main() {
       findsOneWidget,
     );
     await tester.enterText(find.byType(TextField).at(0), 'Treino A');
-    await tester.enterText(find.byType(TextField).at(1), 'Supino');
     await tester.tap(find.byTooltip('Adicionar exercício'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Criar exercício'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'Supino');
+    await tester.tap(find.text('Salvar exercício'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Supino'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Salvar rotina'));
     await tester.tap(find.text('Salvar rotina'));

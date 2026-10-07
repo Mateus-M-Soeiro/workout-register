@@ -6,6 +6,7 @@ import 'routine_editor.dart';
 import 'workout_screen.dart';
 import 'progress_screen.dart';
 import 'history_screen.dart';
+import 'exercises_screen.dart';
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
@@ -108,7 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => RoutineEditor(routine: routine),
+      builder: (_) => RoutineEditor(
+        routine: routine,
+        catalog: store.catalog,
+        onSaveExercise: (exercise) => store.save(exercise: exercise),
+      ),
     );
     if (result == null || !mounted) return;
     final next = [...store.routines];
@@ -175,6 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => WorkoutScreen(
+          catalog: () => store.catalog,
+          onSaveExercise: (exercise) => store.save(exercise: exercise),
           routine: draft.routine,
           draft: draft,
           previous: historyForRoutine(
@@ -245,7 +252,51 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     ),
+    floatingActionButton: tab == 0 && !loading && !failed
+        ? FloatingActionButton(
+            onPressed: saving ? null : () => edit(),
+            tooltip: 'Criar nova rotina',
+            child: const Icon(Icons.add),
+          )
+        : null,
   );
+
+  Future<void> abortWorkout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Abortar treino?'),
+        content: const Text(
+          'O treino em andamento será descartado, sem registrar nada no histórico.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Abortar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => saving = true);
+    try {
+      await store.save(clearActive: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível abortar. Tente novamente.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
 
   Widget home() => PageContent(
     children: [
@@ -265,6 +316,24 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => history(),
             tooltip: 'Histórico de todos os treinos',
             icon: const Icon(Icons.history),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Menu',
+            onSelected: (_) async {
+              await Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ExercisesScreen(store: store),
+                ),
+              );
+              if (mounted) setState(() {});
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'exercises',
+                child: Text('Exercícios salvos'),
+              ),
+            ],
           ),
         ],
       ),
@@ -294,6 +363,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: saving ? null : () => start(store.active!.routine),
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Retomar treino'),
+                ),
+                TextButton.icon(
+                  onPressed: saving ? null : abortWorkout,
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Abortar treino'),
                 ),
               ],
             ),
@@ -368,13 +442,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${routine.exercises.length} exercícios • ${routine.exercises.join(' · ')}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: muted, height: 1.5),
-                ),
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
@@ -400,19 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       }),
-      const SizedBox(height: 12),
-      OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(56),
-          side: const BorderSide(color: accent),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        onPressed: saving ? null : () => edit(),
-        icon: const Icon(Icons.add),
-        label: const Text('Criar nova rotina'),
-      ),
+      const SizedBox(height: 80),
     ],
   );
 }

@@ -4,7 +4,13 @@ import 'models.dart';
 import 'ui.dart';
 
 class HistoryScreen extends StatelessWidget {
-  const HistoryScreen({required this.sessions, this.routine, super.key});
+  const HistoryScreen({
+    required this.sessions,
+    this.routine,
+    this.embedded = false,
+    super.key,
+  });
+  final bool embedded;
   final List<Session> sessions;
   final Routine? routine;
 
@@ -14,13 +20,15 @@ class HistoryScreen extends StatelessWidget {
         ? (List<Session>.of(sessions)..sort((a, b) => b.date.compareTo(a.date)))
         : historyForRoutine(sessions, routine!);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          routine == null
-              ? 'Histórico de treinos'
-              : 'Histórico · ${routine!.name}',
-        ),
-      ),
+      appBar: embedded
+          ? null
+          : AppBar(
+              title: Text(
+                routine == null
+                    ? 'Histórico de treinos'
+                    : 'Histórico · ${routine!.name}',
+              ),
+            ),
       body: SafeArea(
         child: PageContent(
           children: [

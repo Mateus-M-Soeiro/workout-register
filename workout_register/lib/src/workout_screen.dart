@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'models.dart';
 import 'ui.dart';
+import 'exercise_picker.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({
@@ -12,6 +13,8 @@ class WorkoutScreen extends StatefulWidget {
     this.draft,
     this.onDraft,
     this.onDiscard,
+    this.catalog,
+    this.onSaveExercise,
     super.key,
   });
   final Routine routine;
@@ -19,6 +22,8 @@ class WorkoutScreen extends StatefulWidget {
   final ActiveWorkout? draft;
   final Future<void> Function(ActiveWorkout)? onDraft;
   final Future<void> Function()? onDiscard;
+  final List<ExerciseDefinition> Function()? catalog;
+  final Future<void> Function(ExerciseDefinition)? onSaveExercise;
   final Future<void> Function(Session) onFinish;
   @override
   State<WorkoutScreen> createState() => _WorkoutScreenState();
@@ -68,59 +73,52 @@ class _WorkoutScreenState extends State<WorkoutScreen>
     persist();
   }
 
+  late List<ExerciseDefinition> localCatalog = mergeExerciseCatalog(
+    [],
+    widget.routine.exercises,
+  );
+
   Future<void> replaceExercise(String name) async {
-    final dialogForm = GlobalKey<FormState>();
-    var replacement = '';
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Trocar exercício'),
-        content: Form(
-          key: dialogForm,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'A troca vale apenas para este treino. As séries do exercício substituído serão removidas.',
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                autofocus: true,
-                maxLength: 80,
-                decoration: const InputDecoration(labelText: 'Novo exercício'),
-                onChanged: (value) => replacement = value.trim(),
-                validator: (_) => replacement.isEmpty
-                    ? 'Informe o exercício.'
-                    : exercises.keys.any(
-                        (e) => e.toLowerCase() == replacement.toLowerCase(),
-                      )
-                    ? 'Esse exercício já está no treino.'
-                    : null,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (dialogForm.currentState!.validate()) {
-                Navigator.pop(context, replacement);
-              }
-            },
-            child: const Text('Trocar'),
-          ),
-        ],
-      ),
+    final selected = await pickExercise(
+      context,
+      catalog: widget.catalog?.call() ?? localCatalog,
+      excluded: exercises.keys,
+      onSave: (exercise) async {
+        await widget.onSaveExercise?.call(exercise);
+        localCatalog = mergeExerciseCatalog([
+          for (final e in localCatalog)
+            if (e.key != exercise.key) e,
+          exercise,
+        ], []);
+      },
     );
-    if (result == null || !mounted) return;
+    if (selected == null || !mounted) return;
+    if (exercises[name]!.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Trocar exercício?'),
+          content: Text(
+            'Substituir $name por ${selected.name} apenas neste treino? As séries de $name serão removidas. A rotina não será alterada.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Trocar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
     final updated = {
       for (final entry in exercises.entries)
         if (entry.key == name)
-          result: <TrainingSet>[]
+          selected.name: <TrainingSet>[]
         else
           entry.key: entry.value,
     };
@@ -131,6 +129,25 @@ class _WorkoutScreenState extends State<WorkoutScreen>
   }
 
   bool saving = false;
+  Future<void> addExercise() async {
+    final selected = await pickExercise(
+      context,
+      catalog: widget.catalog?.call() ?? localCatalog,
+      excluded: exercises.keys,
+      onSave: (exercise) async {
+        await widget.onSaveExercise?.call(exercise);
+        localCatalog = mergeExerciseCatalog([
+          for (final e in localCatalog)
+            if (e.key != exercise.key) e,
+          exercise,
+        ], []);
+      },
+    );
+    if (selected == null || !mounted) return;
+    exercises[selected.name] = [];
+    changed(selected.name);
+  }
+
   bool mayLeave = false;
 
   Future<void> leave() async {
@@ -155,9 +172,9 @@ class _WorkoutScreenState extends State<WorkoutScreen>
         await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Descartar treino?'),
+            title: const Text('Abortar treino?'),
             content: const Text(
-              'O treino em andamento e suas séries serão removidos.',
+              'O treino em andamento e suas séries serão removidos, sem registrar nada no histórico.',
             ),
             actions: [
               TextButton(
@@ -166,7 +183,7 @@ class _WorkoutScreenState extends State<WorkoutScreen>
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Descartar'),
+                child: const Text('Abortar'),
               ),
             ],
           ),
@@ -254,10 +271,10 @@ class _WorkoutScreenState extends State<WorkoutScreen>
       appBar: AppBar(
         title: const Text('Seu treino'),
         actions: [
-          IconButton(
+          TextButton.icon(
             onPressed: saving ? null : discard,
-            tooltip: 'Descartar treino',
-            icon: const Icon(Icons.delete_outline),
+            label: const Text('Abortar treino'),
+            icon: const Icon(Icons.cancel_outlined),
           ),
         ],
         leading: IconButton(
@@ -330,22 +347,16 @@ class _WorkoutScreenState extends State<WorkoutScreen>
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Wrap(
-                          spacing: 8,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FilterChip(
+                            CompletionToggle(
                               label: Text(
-                                draft.completed.contains(name)
-                                    ? 'Finalizado'
-                                    : 'Marcar finalizado',
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               selected: draft.completed.contains(name),
                               onSelected: saving
@@ -512,6 +523,12 @@ class _WorkoutScreenState extends State<WorkoutScreen>
                   ),
                 );
               }),
+              OutlinedButton.icon(
+                onPressed: saving ? null : addExercise,
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar exercício ao treino'),
+              ),
+              const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: saving ? null : finish,
                 icon: saving

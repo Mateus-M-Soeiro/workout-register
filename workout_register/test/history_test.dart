@@ -81,7 +81,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Remover série 1'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Concluir treino'));
+    await tester.scrollUntilVisible(
+      find.text('Concluir treino'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Concluir treino'));
     await tester.pumpAndSettle();
     expect(saved, isNotNull);

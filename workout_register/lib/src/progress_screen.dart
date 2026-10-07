@@ -4,15 +4,43 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'ui.dart';
+import 'history_screen.dart';
 
-class ProgressScreen extends StatefulWidget {
+class ProgressScreen extends StatelessWidget {
   const ProgressScreen({required this.sessions, super.key});
   final List<Session> sessions;
   @override
-  State<ProgressScreen> createState() => _ProgressScreenState();
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 2,
+    child: Column(
+      children: [
+        const TabBar(
+          tabs: [
+            Tab(text: 'Evolução'),
+            Tab(text: 'Histórico'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            children: [
+              ProgressCharts(sessions: sessions),
+              HistoryScreen(sessions: sessions, embedded: true),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
-class _ProgressScreenState extends State<ProgressScreen> {
+class ProgressCharts extends StatefulWidget {
+  const ProgressCharts({required this.sessions, super.key});
+  final List<Session> sessions;
+  @override
+  State<ProgressCharts> createState() => _ProgressChartsState();
+}
+
+class _ProgressChartsState extends State<ProgressCharts> {
   int days = 7;
   bool volume = false;
 
@@ -162,67 +190,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 style: const TextStyle(fontSize: 12, color: muted, height: 1.5),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 28),
-        Text(
-          'Histórico · ${sessions.length} treinos',
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 14),
-        if (sessions.isEmpty)
-          const Text(
-            'Nenhum treino concluído neste período. Crie uma rotina e registre suas primeiras séries.',
-            style: TextStyle(color: muted, height: 1.5),
-          ),
-        ...sessions.map(
-          (session) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Panel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Início: ${session.startedAt == null ? 'Não registrado' : timestamp(session.startedAt!)}\nFim: ${session.endedAt == null ? 'Não registrado' : timestamp(session.endedAt!)}',
-                    style: const TextStyle(color: accent, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    session.routine,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${session.repetitions} repetições · ${number(session.volume)} kg de volume',
-                    style: const TextStyle(color: muted),
-                  ),
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Ver séries',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    children: [
-                      ...session.exercises.entries.map(
-                        (e) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '${e.key}\n${e.value.map((s) => '${s.reps} reps × ${s.weight} kg').join('  •  ')}',
-                              style: const TextStyle(color: muted, height: 1.6),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ],

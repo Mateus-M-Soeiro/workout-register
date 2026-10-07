@@ -37,7 +37,11 @@ void main() {
           ),
         ),
       );
-      await tester.ensureVisible(find.text('Concluir treino'));
+      await tester.scrollUntilVisible(
+        find.text('Concluir treino'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Concluir treino'));
       await tester.pumpAndSettle();
       expect(result!.startedAt, originalStart);
@@ -168,8 +172,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).at(0), '12');
       await tester.enterText(find.byType(TextFormField).at(1), '20');
-      await tester.ensureVisible(find.text('Marcar finalizado'));
-      await tester.tap(find.text('Marcar finalizado'));
+      await tester.ensureVisible(find.byIcon(Icons.radio_button_unchecked));
+      await tester.tap(find.byIcon(Icons.radio_button_unchecked));
       await tester.pumpAndSettle();
       final start = disk!.startedAt;
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -178,7 +182,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpWidget(screen(draft: disk));
       await tester.pumpAndSettle();
-      expect(find.text('Finalizado'), findsOneWidget);
+      expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
       expect(
         tester
             .widget<EditableText>(find.byType(EditableText).at(0))
@@ -213,16 +217,20 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Marcar finalizado'));
+      await tester.tap(find.byIcon(Icons.radio_button_unchecked));
       await tester.pumpAndSettle();
       expect(draft!.completed, {'Supino'});
-      await tester.tap(find.text('Finalizado'));
+      await tester.tap(find.byIcon(Icons.radio_button_checked));
       await tester.pumpAndSettle();
       expect(draft!.completed, isEmpty);
       await tester.tap(find.text('Trocar exercício'));
       await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Criar exercício'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), 'Flexão');
-      await tester.tap(find.text('Trocar'));
+      await tester.tap(find.text('Salvar exercício'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Flexão'));
       await tester.pumpAndSettle();
       expect(find.text('Flexão'), findsOneWidget);
       expect(draft!.exercises.keys, ['Flexão']);
@@ -253,6 +261,8 @@ void main() {
         ),
       ),
     );
+    await tester.tap(find.text('Histórico'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.textContaining('Início:'),
       300,

@@ -2,45 +2,55 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'ui.dart';
+import 'exercise_picker.dart';
 
 class RoutineEditor extends StatefulWidget {
-  const RoutineEditor({this.routine, super.key});
+  const RoutineEditor({
+    this.routine,
+    this.catalog = const [],
+    this.onSaveExercise,
+    super.key,
+  });
   final Routine? routine;
+  final List<ExerciseDefinition> catalog;
+  final Future<void> Function(ExerciseDefinition)? onSaveExercise;
   @override
   State<RoutineEditor> createState() => _RoutineEditorState();
 }
 
 class _RoutineEditorState extends State<RoutineEditor> {
   late final name = TextEditingController(text: widget.routine?.name);
-  final exercise = TextEditingController();
+  late List<ExerciseDefinition> catalog = List.of(widget.catalog);
   late final exercises = [...?widget.routine?.exercises];
   String? error;
   @override
   void dispose() {
     name.dispose();
-    exercise.dispose();
     super.dispose();
   }
 
-  void add() {
-    final value = exercise.text.trim();
-    if (value.isEmpty) return;
-    if (exercises.any((e) => e.toLowerCase() == value.toLowerCase())) {
-      setState(() => error = 'Esse exercício já está na rotina.');
-      return;
-    }
+  Future<void> add() async {
+    final exercise = await pickExercise(
+      context,
+      catalog: catalog,
+      excluded: exercises,
+      onSave: (exercise) async {
+        await widget.onSaveExercise?.call(exercise);
+        catalog = mergeExerciseCatalog([
+          for (final e in catalog)
+            if (e.key != exercise.key) e,
+          exercise,
+        ], []);
+      },
+    );
+    if (exercise == null || !mounted) return;
     setState(() {
-      exercises.add(value);
-      exercise.clear();
+      exercises.add(exercise.name);
       error = null;
     });
   }
 
   void save() {
-    if (exercise.text.trim().isNotEmpty) {
-      add();
-      if (exercise.text.trim().isNotEmpty) return;
-    }
     if (name.text.trim().isEmpty || exercises.isEmpty) {
       setState(() => error = 'Informe um nome e pelo menos um exercício.');
       return;
@@ -78,28 +88,17 @@ class _RoutineEditorState extends State<RoutineEditor> {
               style: TextStyle(color: muted),
             ),
             const SizedBox(height: 24),
-            TextField(
-              controller: name,
-              maxLength: 60,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Nome da rotina',
-                hintText: 'Ex.: Treino A — Peito e tríceps',
-              ),
-            ),
-            const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: TextField(
-                    controller: exercise,
-                    maxLength: 80,
+                    controller: name,
+                    maxLength: 60,
                     textCapitalization: TextCapitalization.sentences,
-                    onSubmitted: (_) => add(),
                     decoration: const InputDecoration(
-                      labelText: 'Exercício',
-                      hintText: 'Ex.: Supino reto',
+                      labelText: 'Nome da rotina',
+                      hintText: 'Ex.: Treino A — Peito e tríceps',
                     ),
                   ),
                 ),

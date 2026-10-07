@@ -5,6 +5,29 @@ const muted = Color(0xFFA6AFA3);
 const background = Color(0xFF111510);
 const surface = Color(0xFF1D231C);
 
+class CompletionToggle extends StatelessWidget {
+  const CompletionToggle({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    super.key,
+  });
+  final Widget label;
+  final bool selected;
+  final ValueChanged<bool>? onSelected;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    checked: selected,
+    child: TextButton.icon(
+      onPressed: onSelected == null ? null : () => onSelected!(!selected),
+      icon: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+      ),
+      label: label,
+    ),
+  );
+}
+
 class Panel extends StatelessWidget {
   const Panel({required this.child, super.key});
   final Widget child;
